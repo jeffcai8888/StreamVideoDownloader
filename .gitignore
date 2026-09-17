@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 build/
+dist/
 *.egg-info/
 .streamdl_tmp/
 .streamdl_bilibili/

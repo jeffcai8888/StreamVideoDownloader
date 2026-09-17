@@ -42,6 +42,16 @@ streamdl-gui          # pip install . 之后
 python main.py --gui  # 或直接运行
 ```
 
+也可以打包成单文件 exe（双击启动，无需安装 Python）：
+
+```bash
+pip install pyinstaller
+python -m PyInstaller --noconfirm --onefile --windowed --name StreamVideoDownloader gui_app.py
+# 产物在 dist/StreamVideoDownloader.exe
+```
+
+> 注意：exe 不包含 ffmpeg，合并输出 MP4 仍需单独安装 ffmpeg。
+
 主界面展示已下载内容（名称、大小、清晰度、保存位置、完成时间），双击记录可打开所在目录。点击「新建下载」弹出对话框：输入视频网址、SESSDATA（仅 B 站高清需要）、选择保存目录，点击「解析清晰度」后选择分辨率，再点「开始下载」，主界面底部显示实时进度条。
 
 **下载 B 站视频**
@@ -147,6 +157,16 @@ sudo apt install ffmpeg           # Debian/Ubuntu
 streamdl-gui          # after pip install .
 python main.py --gui  # or run directly
 ```
+
+You can also build a standalone exe (double-click to launch, no Python required):
+
+```bash
+pip install pyinstaller
+python -m PyInstaller --noconfirm --onefile --windowed --name StreamVideoDownloader gui_app.py
+# output: dist/StreamVideoDownloader.exe
+```
+
+> Note: ffmpeg is not bundled in the exe — install it separately for MP4 merging.
 
 The main window lists downloaded items (name, size, quality, location, finish time); double-click a record to open its folder. Click "新建下载" (New Download) to open the dialog: enter the video URL, SESSDATA (only needed for high-quality Bilibili downloads), and pick a save directory. Click "解析清晰度" (Parse Qualities), choose a resolution, then "开始下载" (Start Download) — a live progress bar shows at the bottom of the main window.
 
