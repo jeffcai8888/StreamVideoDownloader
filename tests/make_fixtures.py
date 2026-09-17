@@ -74,7 +74,20 @@ with open(os.path.join(ROOT, "master.m3u8"), "w") as f:
         "plain/index.m3u8",
     ]))
 
-# 4. 期望内容（用于校验解密/拼接结果）
+# 4. 直播模拟：复用普通分片，index.m3u8 由测试脚本动态更新（模拟直播推流）
+live_dir = os.path.join(ROOT, "live")
+os.makedirs(live_dir, exist_ok=True)
+import shutil
+for i in range(5):
+    shutil.copy(os.path.join(plain_dir, f"seg{i}.ts"), os.path.join(live_dir, f"seg{i}.ts"))
+with open(os.path.join(live_dir, "index.m3u8"), "w") as f:
+    f.write("\n".join([
+        "#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:0",
+        "#EXTINF:2.0,", "seg0.ts",
+        "#EXTINF:2.0,", "seg1.ts",
+    ]))
+
+# 5. 期望内容（用于校验解密/拼接结果）
 with open(os.path.join(ROOT, "expected_plain.ts"), "wb") as f:
     for i in range(5):
         with open(os.path.join(plain_dir, f"seg{i}.ts"), "rb") as g:

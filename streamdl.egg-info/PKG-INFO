@@ -1,3 +1,13 @@
+Metadata-Version: 2.4
+Name: streamdl
+Version: 0.2.0
+Summary: Streaming media downloader: HLS (m3u8) and Bilibili, with AES-128 decryption, multi-threading, resume and live recording
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.31
+Requires-Dist: pycryptodome>=3.19
+
 # StreamVideoDownloader
 
 [English](#english) | [中文](#中文)

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streamdl"
+version = "0.2.0"
+description = "Streaming media downloader: HLS (m3u8) and Bilibili, with AES-128 decryption, multi-threading, resume and live recording"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31",
+    "pycryptodome>=3.19",
+]
+
+[project.scripts]
+streamdl = "streamdl.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["streamdl*"]
