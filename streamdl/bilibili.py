@@ -185,16 +185,17 @@ def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
     if audio:
         _download_stream(dl, audio["baseUrl"], a_path, "音频流", on_progress)
 
-    from .merger import has_ffmpeg
-    if not has_ffmpeg():
+    from .merger import find_ffmpeg
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
         raise RuntimeError(f"未检测到 ffmpeg，无法合并 B 站音视频流。文件保留在 {tmp_dir}")
 
     import subprocess
     if audio:
-        cmd = ["ffmpeg", "-y", "-loglevel", "error",
+        cmd = [ffmpeg, "-y", "-loglevel", "error",
                "-i", v_path, "-i", a_path, "-c", "copy", output]
     else:
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", v_path, "-c", "copy", output]
+        cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", v_path, "-c", "copy", output]
     subprocess.run(cmd, check=True)
 
     if not keep_temp:
