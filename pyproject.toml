@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "requests>=2.31",
     "pycryptodome>=3.19",
+    "qrcode[pil]>=7.4",
 ]
 
 [project.scripts]

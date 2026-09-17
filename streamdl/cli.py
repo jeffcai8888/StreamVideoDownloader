@@ -45,7 +45,31 @@ def build_parser() -> argparse.ArgumentParser:
                    help="直播录制模式：持续轮询 m3u8 直到 ENDLIST 或 Ctrl+C")
     p.add_argument("--with-cover", action="store_true", help="B 站视频同时下载封面图片")
     p.add_argument("--with-mp3", action="store_true", help="B 站视频同时提取 MP3 音频")
+    p.add_argument("--login", action="store_true",
+                   help="B 站扫码登录（终端显示二维码），登录态保存后无需再输入 SESSDATA")
     return p
+
+
+def _do_login() -> int:
+    """终端扫码登录 B 站：打印 ASCII 二维码，手机确认后保存 SESSDATA。"""
+    from .bili_login import (WAITING_CONFIRM, generate_qrcode, render_qr_ascii,
+                             wait_login)
+    try:
+        key, url = generate_qrcode()
+        print("请使用哔哩哔哩手机 App 扫描下方二维码并确认登录：\n")
+        print(render_qr_ascii(url))
+
+        def _status(code):
+            if code == WAITING_CONFIRM:
+                print("\r已扫码，请在手机上确认登录...", end="", flush=True)
+
+        sessdata = wait_login(key, on_status=_status)
+        print(f"\n登录成功，SESSDATA 已保存（{sessdata[:8]}...）")
+        print("之后下载 B 站视频会自动使用该登录态，无需再手动输入")
+        return 0
+    except Exception as e:  # noqa: BLE001
+        print(f"\n登录失败: {e}", file=sys.stderr)
+        return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.gui:
         from .gui import run
         return run()
+
+    if args.login:
+        return _do_login()
+
     if not args.url:
         build_parser().error("缺少 url 参数（或使用 --gui 启动图形界面）")
 
@@ -69,6 +97,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from .bilibili import download_bilibili, is_bilibili
     if is_bilibili(args.url):
+        # 未显式传 Cookie 时自动读取扫码登录保存的 SESSDATA
+        if not (opt.headers and "Cookie" in opt.headers):
+            from .bili_login import load_sessdata
+            saved = load_sessdata()
+            if saved:
+                dl.session.headers["Cookie"] = f"SESSDATA={saved}"
+                print("已自动使用保存的 B 站登录态")
         output = None if args.output == "output.mp4" else args.output  # 默认用视频标题命名
         try:
             final = download_bilibili(dl, args.url, output,

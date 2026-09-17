@@ -16,6 +16,8 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .bili_login import (WAITING_CONFIRM, WAITING_SCAN, generate_qrcode,
+                         load_sessdata, render_qr_png, wait_login)
 from .bilibili import download_bilibili, get_video_info, is_bilibili, list_qualities
 from .downloader import DownloadOptions, StreamDownloader
 from .merger import has_ffmpeg, merge
@@ -53,6 +55,71 @@ def save_history(records: list[dict]) -> None:
         pass
 
 
+class LoginDialog(tk.Toplevel):
+    """B 站扫码登录窗口：显示二维码，手机 App 扫码确认后自动写入 SESSDATA。"""
+
+    def __init__(self, parent: "DownloadDialog"):
+        super().__init__(parent)
+        self.parent_dialog = parent
+        self.app = parent.app
+        self.title("B站扫码登录")
+        self.resizable(False, False)
+        self.transient(parent)
+
+        self._qr_image = None  # 持有引用防止被 GC
+        self._qr_label = ttk.Label(self)
+        self._qr_label.pack(padx=16, pady=12)
+        self.status_var = tk.StringVar(value="正在生成二维码…")
+        ttk.Label(self, textvariable=self.status_var).pack(pady=4)
+        ttk.Button(self, text="刷新二维码", command=self._start).pack(pady=8)
+        ttk.Label(self, text="请使用哔哩哔哩手机 App 扫码并确认登录",
+                  foreground="gray").pack(pady=(0, 10))
+
+        self.app.login_window = self
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._start()
+
+    def _on_close(self):
+        self.app.login_window = None
+        self.destroy()
+
+    def _start(self):
+        self.status_var.set("正在生成二维码…")
+        threading.Thread(target=self._login_worker, daemon=True).start()
+
+    def _login_worker(self):
+        q = self.app.queue
+        try:
+            key, url = generate_qrcode()
+            q.put(("qr_image", render_qr_png(url)))
+            sessdata = wait_login(key, on_status=lambda c: q.put(("qr_status", c)))
+            q.put(("login_success", sessdata))
+        except Exception as e:  # noqa: BLE001
+            q.put(("login_error", str(e)))
+
+    # 以下方法由主线程（_poll_queue）调用
+
+    def show_qr(self, png: bytes):
+        self._qr_image = tk.PhotoImage(data=png)
+        self._qr_label.config(image=self._qr_image)
+        self.status_var.set("等待扫码…")
+
+    def show_status(self, code: int):
+        if code == WAITING_SCAN:
+            self.status_var.set("等待扫码…")
+        elif code == WAITING_CONFIRM:
+            self.status_var.set("已扫码，请在手机上确认登录")
+
+    def on_success(self, sessdata: str):
+        self.parent_dialog.sess_var.set(sessdata)
+        messagebox.showinfo("登录成功", "已获取登录态，SESSDATA 已自动保存",
+                            parent=self)
+        self._on_close()
+
+    def on_error(self, msg: str):
+        self.status_var.set(f"登录失败：{msg}")
+
+
 class DownloadDialog(tk.Toplevel):
     """新建下载对话框：输入网址 / SESSDATA / 目录 -> 解析清晰度 -> 开始下载。"""
 
@@ -76,9 +143,13 @@ class DownloadDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=self.url_var, width=52).grid(row=0, column=1, **pad)
 
         ttk.Label(frm, text="SESSDATA:").grid(row=1, column=0, sticky="e", **pad)
-        self.sess_var = tk.StringVar()
-        ttk.Entry(frm, textvariable=self.sess_var, width=52, show="*").grid(row=1, column=1, **pad)
-        ttk.Label(frm, text="（仅 B 站高清需要，可为空）", foreground="gray").grid(
+        sess_frm = ttk.Frame(frm)
+        sess_frm.grid(row=1, column=1, sticky="w")
+        self.sess_var = tk.StringVar(value=load_sessdata())
+        ttk.Entry(sess_frm, textvariable=self.sess_var, width=40, show="*").pack(side="left")
+        ttk.Button(sess_frm, text="扫码登录", command=self._open_login).pack(side="left", padx=4)
+        hint = "（已自动读取登录态）" if self.sess_var.get() else "（仅 B 站高清需要，可为空或扫码登录）"
+        ttk.Label(frm, text=hint, foreground="gray").grid(
             row=2, column=1, sticky="w")
 
         ttk.Label(frm, text="保存目录:").grid(row=3, column=0, sticky="e", **pad)
@@ -122,6 +193,9 @@ class DownloadDialog(tk.Toplevel):
         d = filedialog.askdirectory(parent=self, initialdir=self.dir_var.get())
         if d:
             self.dir_var.set(d)
+
+    def _open_login(self):
+        LoginDialog(self)
 
     def _make_downloader(self) -> StreamDownloader:
         headers = {}
@@ -220,6 +294,7 @@ class StreamDLApp:
         self.queue: queue.Queue = queue.Queue()
         self.history = load_history()
         self._dialog: DownloadDialog | None = None
+        self.login_window: LoginDialog | None = None
 
         root.title("StreamVideoDownloader")
         root.geometry("860x460")
@@ -409,6 +484,18 @@ class StreamDLApp:
                     if self._dialog and self._dialog.winfo_exists():
                         self._dialog.on_parse_error(msg[1])
                         messagebox.showwarning("解析失败", msg[1], parent=self._dialog)
+                elif kind == "qr_image":
+                    if self.login_window and self.login_window.winfo_exists():
+                        self.login_window.show_qr(msg[1])
+                elif kind == "qr_status":
+                    if self.login_window and self.login_window.winfo_exists():
+                        self.login_window.show_status(msg[1])
+                elif kind == "login_success":
+                    if self.login_window and self.login_window.winfo_exists():
+                        self.login_window.on_success(msg[1])
+                elif kind == "login_error":
+                    if self.login_window and self.login_window.winfo_exists():
+                        self.login_window.on_error(msg[1])
         except queue.Empty:
             pass
         self.root.after(100, self._poll_queue)

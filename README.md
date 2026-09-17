@@ -64,7 +64,10 @@ python main.py "https://www.bilibili.com/video/BV17x411w7KC/"
 # 多 P 视频选择分集
 python main.py BV17x411w7KC -p 2
 
-# 高清画质需要登录 Cookie（F12 -> Application -> Cookies -> SESSDATA）
+# 高清画质需要登录：GUI 对话框中点「扫码登录」，或 CLI 执行一次扫码登录
+python main.py --login     # 终端显示二维码，手机 B 站 App 扫码确认即可
+# 登录态（SESSDATA）保存在 ~/.streamdl_config.json，之后下载自动使用
+# 也可以手动传 Cookie：
 python main.py BV17x411w7KC -H "Cookie: SESSDATA=你的SESSDATA"
 
 # 同时下载封面图片和 MP3 音频
@@ -104,6 +107,7 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--live` | 直播录制模式（轮询直到 ENDLIST 或 Ctrl+C） | 关闭 |
 | `--with-cover` | B 站视频同时下载封面图片 | 关闭 |
 | `--with-mp3` | B 站视频同时提取 MP3 音频 | 关闭 |
+| `--login` | B 站扫码登录并保存登录态 | — |
 | `--keep-temp` | 保留临时分片目录 | 不保留 |
 
 ### 项目结构
@@ -113,6 +117,7 @@ streamdl/
 ├── parser.py       # m3u8 解析（Master/Media Playlist、AES-128 KEY、fMP4 MAP）
 ├── downloader.py   # 多线程分片下载、AES-128 解密、重试、断点续传、直播录制
 ├── bilibili.py     # B 站 API 解析与 DASH 流下载
+├── bili_login.py   # B 站扫码登录与 SESSDATA 持久化
 ├── merger.py       # ffmpeg 合并 MP4 / 二进制拼接 TS
 ├── gui.py          # Tkinter 图形界面
 └── cli.py          # 命令行入口
@@ -185,7 +190,10 @@ python main.py "https://www.bilibili.com/video/BV17x411w7KC/"
 # Select a page of a multi-part video
 python main.py BV17x411w7KC -p 2
 
-# Higher qualities require a login cookie (F12 -> Application -> Cookies -> SESSDATA)
+# Higher qualities require login: click "扫码登录" in the GUI dialog, or run QR login once in the CLI
+python main.py --login     # shows a QR code in the terminal; scan with the Bilibili mobile app
+# The login state (SESSDATA) is saved to ~/.streamdl_config.json and reused automatically
+# Or pass a cookie manually:
 python main.py BV17x411w7KC -H "Cookie: SESSDATA=your_sessdata"
 
 # Also save the cover image and extract an MP3 audio track
@@ -225,6 +233,7 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--live` | Live recording mode (polls until ENDLIST or Ctrl+C) | off |
 | `--with-cover` | Also download the Bilibili cover image | off |
 | `--with-mp3` | Also extract an MP3 audio track (Bilibili) | off |
+| `--login` | Bilibili QR-code login and save the login state | — |
 | `--keep-temp` | Keep the temporary segment directory | off |
 
 ### Project Structure
@@ -234,6 +243,7 @@ streamdl/
 ├── parser.py       # m3u8 parsing (Master/Media Playlist, AES-128 KEY, fMP4 MAP)
 ├── downloader.py   # Multi-threaded segment download, AES-128 decryption, retry, resume, live recording
 ├── bilibili.py     # Bilibili API resolution and DASH stream download
+├── bili_login.py   # Bilibili QR-code login and SESSDATA persistence
 ├── merger.py       # ffmpeg merge to MP4 / binary concat to TS
 ├── gui.py          # Tkinter graphical interface
 └── cli.py          # Command-line entry point
