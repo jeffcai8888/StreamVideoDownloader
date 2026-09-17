@@ -379,11 +379,16 @@ class StreamDLApp:
                 elif kind == "status":
                     self.status_var.set(msg[1])
                 elif kind == "done":
+                    rec = msg[1]
                     self.progress.config(value=100)
-                    self.status_var.set(f"完成：{msg[1]['name']}")
-                    self.history.append(msg[1])
+                    self.status_var.set(f"完成：{rec['name']}")
+                    self.history.append(rec)
                     save_history(self.history)
                     self._reload_tree()
+                    messagebox.showinfo(
+                        "下载完成",
+                        f"{rec['name']}\n\n大小：{_fmt_size(rec['size'])}"
+                        f"\n保存位置：{rec['path']}")
                 elif kind == "error":
                     self.progress.config(value=0)
                     self.status_var.set(f"下载失败：{msg[1]}")
@@ -394,6 +399,7 @@ class StreamDLApp:
                 elif kind == "parse_error":
                     if self._dialog and self._dialog.winfo_exists():
                         self._dialog.on_parse_error(msg[1])
+                        messagebox.showwarning("解析失败", msg[1], parent=self._dialog)
         except queue.Empty:
             pass
         self.root.after(100, self._poll_queue)
