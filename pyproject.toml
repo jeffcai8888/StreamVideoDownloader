@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 streamdl = "streamdl.cli:main"
+streamdl-gui = "streamdl.gui:run"
 
 [tool.setuptools.packages.find]
 include = ["streamdl*"]

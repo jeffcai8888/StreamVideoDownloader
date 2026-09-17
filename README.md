@@ -35,6 +35,15 @@ sudo apt install ffmpeg           # Debian/Ubuntu
 
 ### 使用方法
 
+**图形界面（GUI）**
+
+```bash
+streamdl-gui          # pip install . 之后
+python main.py --gui  # 或直接运行
+```
+
+主界面展示已下载内容（名称、大小、清晰度、保存位置、完成时间），双击记录可打开所在目录。点击「新建下载」弹出对话框：输入视频网址、SESSDATA（仅 B 站高清需要）、选择保存目录，点击「解析清晰度」后选择分辨率，再点「开始下载」，主界面底部显示实时进度条。
+
 **下载 B 站视频**
 
 ```bash
@@ -87,9 +96,10 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 ```
 streamdl/
 ├── parser.py       # m3u8 解析（Master/Media Playlist、AES-128 KEY、fMP4 MAP）
-├── downloader.py   # 多线程分片下载、AES-128 解密、重试、断点续传
+├── downloader.py   # 多线程分片下载、AES-128 解密、重试、断点续传、直播录制
 ├── bilibili.py     # B 站 API 解析与 DASH 流下载
 ├── merger.py       # ffmpeg 合并 MP4 / 二进制拼接 TS
+├── gui.py          # Tkinter 图形界面
 └── cli.py          # 命令行入口
 ```
 
@@ -130,6 +140,15 @@ sudo apt install ffmpeg           # Debian/Ubuntu
 ```
 
 ### Usage
+
+**Graphical interface (GUI)**
+
+```bash
+streamdl-gui          # after pip install .
+python main.py --gui  # or run directly
+```
+
+The main window lists downloaded items (name, size, quality, location, finish time); double-click a record to open its folder. Click "新建下载" (New Download) to open the dialog: enter the video URL, SESSDATA (only needed for high-quality Bilibili downloads), and pick a save directory. Click "解析清晰度" (Parse Qualities), choose a resolution, then "开始下载" (Start Download) — a live progress bar shows at the bottom of the main window.
 
 **Download a Bilibili video**
 
@@ -183,9 +202,10 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 ```
 streamdl/
 ├── parser.py       # m3u8 parsing (Master/Media Playlist, AES-128 KEY, fMP4 MAP)
-├── downloader.py   # Multi-threaded segment download, AES-128 decryption, retry, resume
+├── downloader.py   # Multi-threaded segment download, AES-128 decryption, retry, resume, live recording
 ├── bilibili.py     # Bilibili API resolution and DASH stream download
 ├── merger.py       # ffmpeg merge to MP4 / binary concat to TS
+├── gui.py          # Tkinter graphical interface
 └── cli.py          # Command-line entry point
 ```
 

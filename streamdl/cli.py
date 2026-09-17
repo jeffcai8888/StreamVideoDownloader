@@ -26,7 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="streamdl",
         description="流媒体 (HLS/m3u8) 下载工具：多线程下载、AES-128 解密、自动合并",
     )
-    p.add_argument("url", help="m3u8 地址，或 B 站 BV 号 / av 号 / 视频链接")
+    p.add_argument("url", nargs="?", help="m3u8 地址，或 B 站 BV 号 / av 号 / 视频链接")
+    p.add_argument("--gui", action="store_true", help="启动图形界面")
     p.add_argument("-o", "--output", default="output.mp4",
                    help="输出文件名（默认 output.mp4；无 ffmpeg 时自动改为 .ts）")
     p.add_argument("-p", "--page", type=int, default=1, help="B 站分 P 序号（默认 1）")
@@ -47,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.gui:
+        from .gui import run
+        return run()
+    if not args.url:
+        build_parser().error("缺少 url 参数（或使用 --gui 启动图形界面）")
 
     opt = DownloadOptions(
         threads=args.threads,

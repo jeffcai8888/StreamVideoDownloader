@@ -55,6 +55,8 @@ class StreamDownloader:
         self._done = 0
         self._total = 0
         self._failed: list[Segment] = []
+        # GUI 可注入进度回调 on_progress(done, total)；为 None 时输出到终端
+        self.on_progress = None
 
     # ---------- 网络 ----------
 
@@ -115,6 +117,9 @@ class StreamDownloader:
     def _tick(self, seg: Segment) -> None:
         with self._progress_lock:
             self._done += 1
+            if self.on_progress:
+                self.on_progress(self._done, self._total)
+                return
             pct = self._done / self._total * 100 if self._total else 0
             sys.stderr.write(
                 f"\r下载进度: {self._done}/{self._total} ({pct:.1f}%) "

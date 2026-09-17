@@ -73,26 +73,52 @@ def get_video_info(dl: StreamDownloader, target: str, page: int = 1) -> tuple[st
     return title, str(p["cid"]), play
 
 
-def _pick_dash_streams(play: dict) -> tuple[dict, dict | None]:
+def _pick_dash_streams(play: dict, quality_id: int | None = None) -> tuple[dict, dict | None]:
     dash = play.get("dash")
     if not dash or not dash.get("video"):
         raise RuntimeError(
             "未获取到 DASH 流。若需要高清晰度，请用 -H \"Cookie: SESSDATA=...\" 传入登录 Cookie"
         )
-    # 同清晰度优先 avc（H.264）编码，兼容性最好；再按带宽排序
-    videos = sorted(
-        dash["video"],
-        key=lambda v: (v.get("id", 0), "avc" in v.get("codecs", ""), v.get("bandwidth", 0)),
-        reverse=True,
-    )
-    video = videos[0]
+    if quality_id is not None:
+        candidates = [v for v in dash["video"] if v.get("id") == quality_id]
+        if not candidates:
+            raise RuntimeError(f"所选清晰度不可用: qn={quality_id}")
+        # 同清晰度优先 avc（H.264）编码，再按带宽
+        video = max(candidates, key=lambda v: ("avc" in v.get("codecs", ""),
+                                               v.get("bandwidth", 0)))
+    else:
+        # 优先高清晰度，同级优先 avc 编码与更高带宽
+        video = max(dash["video"], key=lambda v: (v.get("id", 0),
+                                                  "avc" in v.get("codecs", ""),
+                                                  v.get("bandwidth", 0)))
     audios = dash.get("audio") or []
     audio = max(audios, key=lambda a: a.get("bandwidth", 0)) if audios else None
     return video, audio
 
 
-def _download_stream(dl: StreamDownloader, url: str, path: str, label: str) -> None:
-    """带进度和断点续传的流式下载。"""
+def list_qualities(play: dict) -> list[dict]:
+    """列出可用的清晰度选项（每个清晰度取 avc 优先的一档），供 GUI/CLI 选择。"""
+    dash = play.get("dash") or {}
+    best_by_id: dict[int, dict] = {}
+    for v in dash.get("video", []):
+        qid = v.get("id", 0)
+        cur = best_by_id.get(qid)
+        if cur is None or ("avc" in v.get("codecs", "")
+                           and "avc" not in cur.get("codecs", "")):
+            best_by_id[qid] = v
+    return [
+        {
+            "id": qid,
+            "label": f"{QUALITY_NAMES.get(qid, f'qn={qid}')} "
+                     f"({v.get('width')}x{v.get('height')})",
+        }
+        for qid, v in sorted(best_by_id.items(), reverse=True)
+    ]
+
+
+def _download_stream(dl: StreamDownloader, url: str, path: str, label: str,
+                     on_progress=None) -> None:
+    """带进度和断点续传的流式下载。on_progress(label, done_bytes, total_bytes)。"""
     headers = {"Referer": REFERER}
     downloaded = os.path.getsize(path) if os.path.exists(path) else 0
     mode = "wb"
@@ -114,13 +140,16 @@ def _download_stream(dl: StreamDownloader, url: str, path: str, label: str) -> N
                     for chunk in resp.iter_content(chunk_size=1024 * 256):
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total:
+                        if on_progress:
+                            on_progress(label, downloaded, total)
+                        elif total:
                             sys.stderr.write(
                                 f"\r{label}: {downloaded/1048576:.1f}/{total/1048576:.1f} MB "
                                 f"({downloaded/total*100:.1f}%)"
                             )
                             sys.stderr.flush()
-            sys.stderr.write("\n")
+            if not on_progress:
+                sys.stderr.write("\n")
             return
         except Exception as e:  # noqa: BLE001 - 重试并从断点继续
             last_err = e
@@ -130,12 +159,13 @@ def _download_stream(dl: StreamDownloader, url: str, path: str, label: str) -> N
 
 
 def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
-                      page: int = 1, keep_temp: bool = False) -> str:
+                      page: int = 1, keep_temp: bool = False,
+                      quality_id: int | None = None, on_progress=None) -> str:
     title, cid, play = get_video_info(dl, target, page)
     if output is None:
         safe = re.sub(r'[\\/:*?"<>|]', "_", title or target).strip() or "bilibili"
         output = f"{safe}.mp4"
-    video, audio = _pick_dash_streams(play)
+    video, audio = _pick_dash_streams(play, quality_id)
 
     qn = video.get("id", 0)
     quality = QUALITY_NAMES.get(qn, f"qn={qn}")
@@ -151,9 +181,9 @@ def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
     v_path = os.path.join(tmp_dir, "video.m4s")
     a_path = os.path.join(tmp_dir, "audio.m4s")
 
-    _download_stream(dl, video["baseUrl"], v_path, "视频流")
+    _download_stream(dl, video["baseUrl"], v_path, "视频流", on_progress)
     if audio:
-        _download_stream(dl, audio["baseUrl"], a_path, "音频流")
+        _download_stream(dl, audio["baseUrl"], a_path, "音频流", on_progress)
 
     from .merger import has_ffmpeg
     if not has_ffmpeg():
