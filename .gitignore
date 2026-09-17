@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.streamdl_tmp/
+.streamdl_bilibili/
+tests/site/
+*.mp4
+*.ts
+!tests/*.py
