@@ -9,6 +9,8 @@ import os
 import re
 import sys
 
+import requests
+
 from .downloader import StreamDownloader
 
 PAGELIST_API = "https://api.bilibili.com/x/web-interface/view"
@@ -116,6 +118,13 @@ def list_qualities(play: dict) -> list[dict]:
     ]
 
 
+def _range_total(resp: requests.Response) -> int | None:
+    """从 416 响应的 Content-Range: bytes */TOTAL 头中解析文件总大小。"""
+    cr = resp.headers.get("Content-Range", "")
+    m = re.match(r"bytes \*/(\d+)", cr)
+    return int(m.group(1)) if m else None
+
+
 def _download_stream(dl: StreamDownloader, url: str, path: str, label: str,
                      on_progress=None) -> None:
     """带进度和断点续传的流式下载。on_progress(label, done_bytes, total_bytes)。"""
@@ -131,6 +140,16 @@ def _download_stream(dl: StreamDownloader, url: str, path: str, label: str,
         try:
             with dl.session.get(url, headers=headers, timeout=dl.opt.timeout,
                                 stream=True) as resp:
+                if resp.status_code == 416:
+                    # Range 越界：本地文件已完整则跳过，否则从头重新下载
+                    total_hint = _range_total(resp)
+                    if downloaded and total_hint and downloaded >= total_hint:
+                        if on_progress:
+                            on_progress(label, downloaded, downloaded)
+                        return
+                    downloaded, mode = 0, "wb"
+                    headers.pop("Range", None)
+                    continue
                 if downloaded and resp.status_code == 200:
                     # 服务端不支持 Range，重新下载
                     downloaded, mode = 0, "wb"
@@ -153,8 +172,9 @@ def _download_stream(dl: StreamDownloader, url: str, path: str, label: str,
             return
         except Exception as e:  # noqa: BLE001 - 重试并从断点继续
             last_err = e
-            mode = "ab"
-            headers["Range"] = f"bytes={downloaded}-"
+            if downloaded > 0:
+                mode = "ab"
+                headers["Range"] = f"bytes={downloaded}-"
     raise RuntimeError(f"{label} 下载失败: {last_err}")
 
 
@@ -176,7 +196,9 @@ def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
         print("提示: 当前为低清晰度，传入登录 Cookie 可解锁 1080p+:"
               " -H \"Cookie: SESSDATA=...\"")
 
-    tmp_dir = os.path.abspath(".streamdl_bilibili")
+    import hashlib
+    tmp_key = hashlib.md5(f"{target}|p{page}|qn{video.get('id')}".encode()).hexdigest()[:10]
+    tmp_dir = os.path.abspath(os.path.join(".streamdl_bilibili", tmp_key))
     os.makedirs(tmp_dir, exist_ok=True)
     v_path = os.path.join(tmp_dir, "video.m4s")
     a_path = os.path.join(tmp_dir, "audio.m4s")
