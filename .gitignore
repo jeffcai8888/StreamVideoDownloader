@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+build/
+*.egg-info/
 .streamdl_tmp/
 .streamdl_bilibili/
 tests/site/
