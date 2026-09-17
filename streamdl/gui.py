@@ -94,12 +94,23 @@ class DownloadDialog(tk.Toplevel):
                                         state="readonly", width=49)
         self.quality_box.grid(row=4, column=1, **pad)
 
+        extra_frm = ttk.Frame(frm)
+        extra_frm.grid(row=5, column=1, sticky="w")
+        self.cover_var = tk.BooleanVar(value=True)
+        self.mp3_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(extra_frm, text="同时保存封面",
+                        variable=self.cover_var).pack(side="left")
+        ttk.Checkbutton(extra_frm, text="同时提取 MP3",
+                        variable=self.mp3_var).pack(side="left", padx=8)
+        ttk.Label(frm, text="（仅 B 站生效）", foreground="gray").grid(
+            row=6, column=1, sticky="w")
+
         self.status_var = tk.StringVar(value="输入网址后点击「解析清晰度」")
         ttk.Label(frm, textvariable=self.status_var, foreground="gray").grid(
-            row=5, column=0, columnspan=2, sticky="w", **pad)
+            row=7, column=0, columnspan=2, sticky="w", **pad)
 
         btn_frm = ttk.Frame(frm)
-        btn_frm.grid(row=6, column=0, columnspan=2, pady=8)
+        btn_frm.grid(row=8, column=0, columnspan=2, pady=8)
         self.parse_btn = ttk.Button(btn_frm, text="解析清晰度", command=self._on_parse)
         self.parse_btn.pack(side="left", padx=6)
         self.dl_btn = ttk.Button(btn_frm, text="开始下载", command=self._on_download,
@@ -136,7 +147,7 @@ class DownloadDialog(tk.Toplevel):
     def _parse_worker(self, url: str, dl: StreamDownloader):
         try:
             if is_bilibili(url):
-                title, cid, play = get_video_info(dl, url)
+                title, cid, play, view = get_video_info(dl, url)
                 qualities = list_qualities(play)
                 if not qualities:
                     raise RuntimeError("未获取到可用清晰度")
@@ -197,6 +208,8 @@ class DownloadDialog(tk.Toplevel):
             "dir": out_dir,
             "quality_id": q["id"],
             "quality_label": q["label"],
+            "with_cover": self.cover_var.get(),
+            "with_mp3": self.mp3_var.get(),
         })
         self.destroy()
 
@@ -313,16 +326,12 @@ class StreamDLApp:
                     q.put(("progress", d / t if t else 0,
                            f"{label} {_fmt_size(done)}" + (f" / {_fmt_size(t)}" if t else "")))
 
-                out_name = None  # 用视频标题命名
-                final = download_bilibili(dl, p["url"], out_name,
+                final = download_bilibili(dl, p["url"], None,  # 用视频标题命名
                                           quality_id=p["quality_id"],
-                                          on_progress=on_bytes)
-                # download_bilibili 默认输出到当前目录，移动到目标目录
-                if os.path.dirname(os.path.abspath(final)) != os.path.abspath(p["dir"]):
-                    import shutil
-                    dest = os.path.join(p["dir"], os.path.basename(final))
-                    shutil.move(final, dest)
-                    final = dest
+                                          on_progress=on_bytes,
+                                          with_cover=p["with_cover"],
+                                          with_mp3=p["with_mp3"],
+                                          out_dir=p["dir"])
                 q.put(("done", {
                     "name": os.path.basename(final), "path": final,
                     "size": os.path.getsize(final),

@@ -56,8 +56,8 @@ def _get_json(dl: StreamDownloader, url: str, params: dict) -> dict:
     return data["data"]
 
 
-def get_video_info(dl: StreamDownloader, target: str, page: int = 1) -> tuple[str, str, dict]:
-    """返回 (标题, cid, playurl data)。"""
+def get_video_info(dl: StreamDownloader, target: str, page: int = 1) -> tuple[str, str, dict, dict]:
+    """返回 (标题, cid, playurl data, view data)。view data 含封面 pic 等元信息。"""
     # view 接口同时接受 aid/bvid，并返回 bvid + 分 P 列表（playurl 接口只认 bvid）
     view = _get_json(dl, PAGELIST_API, _extract_ids(target))
     pages = view.get("pages") or []
@@ -72,7 +72,7 @@ def get_video_info(dl: StreamDownloader, target: str, page: int = 1) -> tuple[st
     title = view.get("title", "")
     if len(pages) > 1 and p.get("part"):
         title = f"{title} P{page} {p['part']}"
-    return title, str(p["cid"]), play
+    return title, str(p["cid"]), play, view
 
 
 def _pick_dash_streams(play: dict, quality_id: int | None = None) -> tuple[dict, dict | None]:
@@ -180,11 +180,16 @@ def _download_stream(dl: StreamDownloader, url: str, path: str, label: str,
 
 def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
                       page: int = 1, keep_temp: bool = False,
-                      quality_id: int | None = None, on_progress=None) -> str:
-    title, cid, play = get_video_info(dl, target, page)
+                      quality_id: int | None = None, on_progress=None,
+                      with_cover: bool = False, with_mp3: bool = False,
+                      out_dir: str | None = None) -> str:
+    title, cid, play, view = get_video_info(dl, target, page)
     if output is None:
         safe = re.sub(r'[\\/:*?"<>|]', "_", title or target).strip() or "bilibili"
         output = f"{safe}.mp4"
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+        output = os.path.join(out_dir, os.path.basename(output))
     video, audio = _pick_dash_streams(play, quality_id)
 
     qn = video.get("id", 0)
@@ -219,6 +224,27 @@ def download_bilibili(dl: StreamDownloader, target: str, output: str | None,
     else:
         cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", v_path, "-c", "copy", output]
     subprocess.run(cmd, check=True)
+
+    base = os.path.splitext(output)[0]
+
+    # 封面图片
+    if with_cover and view.get("pic"):
+        cover_url = view["pic"].split("@")[0]  # 去掉缩放参数，取原图
+        ext = os.path.splitext(cover_url.split("?")[0])[1] or ".jpg"
+        resp = dl.session.get(cover_url, headers={"Referer": REFERER},
+                              timeout=dl.opt.timeout)
+        resp.raise_for_status()
+        with open(base + ext, "wb") as f:
+            f.write(resp.content)
+        print(f"封面: {base}{ext}")
+
+    # 提取 MP3 音频（直接转码已下载的音频流）
+    if with_mp3 and audio:
+        mp3_path = base + ".mp3"
+        subprocess.run([ffmpeg, "-y", "-loglevel", "error",
+                        "-i", a_path, "-vn", "-c:a", "libmp3lame", "-q:a", "2",
+                        mp3_path], check=True)
+        print(f"音频: {mp3_path}")
 
     if not keep_temp:
         import shutil

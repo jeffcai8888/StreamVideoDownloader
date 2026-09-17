@@ -43,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Master Playlist 时列出所有清晰度供选择（默认自动选最高码率）")
     p.add_argument("--live", action="store_true",
                    help="直播录制模式：持续轮询 m3u8 直到 ENDLIST 或 Ctrl+C")
+    p.add_argument("--with-cover", action="store_true", help="B 站视频同时下载封面图片")
+    p.add_argument("--with-mp3", action="store_true", help="B 站视频同时提取 MP3 音频")
     return p
 
 
@@ -70,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
         output = None if args.output == "output.mp4" else args.output  # 默认用视频标题命名
         try:
             final = download_bilibili(dl, args.url, output,
-                                      page=args.page, keep_temp=args.keep_temp)
+                                      page=args.page, keep_temp=args.keep_temp,
+                                      with_cover=args.with_cover,
+                                      with_mp3=args.with_mp3)
         except Exception as e:  # noqa: BLE001
             print(f"B站下载失败: {e}", file=sys.stderr)
             return 1

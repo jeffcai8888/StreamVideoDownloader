@@ -66,6 +66,9 @@ python main.py BV17x411w7KC -p 2
 
 # 高清画质需要登录 Cookie（F12 -> Application -> Cookies -> SESSDATA）
 python main.py BV17x411w7KC -H "Cookie: SESSDATA=你的SESSDATA"
+
+# 同时下载封面图片和 MP3 音频
+python main.py BV17x411w7KC --with-cover --with-mp3
 ```
 
 **下载 m3u8 / HLS 流**
@@ -99,6 +102,8 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--proxy` | HTTP 代理 | 无 |
 | `--select` | Master Playlist 手动选清晰度 | 自动最高码率 |
 | `--live` | 直播录制模式（轮询直到 ENDLIST 或 Ctrl+C） | 关闭 |
+| `--with-cover` | B 站视频同时下载封面图片 | 关闭 |
+| `--with-mp3` | B 站视频同时提取 MP3 音频 | 关闭 |
 | `--keep-temp` | 保留临时分片目录 | 不保留 |
 
 ### 项目结构
@@ -182,6 +187,9 @@ python main.py BV17x411w7KC -p 2
 
 # Higher qualities require a login cookie (F12 -> Application -> Cookies -> SESSDATA)
 python main.py BV17x411w7KC -H "Cookie: SESSDATA=your_sessdata"
+
+# Also save the cover image and extract an MP3 audio track
+python main.py BV17x411w7KC --with-cover --with-mp3
 ```
 
 **Download an m3u8 / HLS stream**
@@ -215,6 +223,8 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--proxy` | HTTP proxy | none |
 | `--select` | Manually pick quality from a Master Playlist | highest bandwidth |
 | `--live` | Live recording mode (polls until ENDLIST or Ctrl+C) | off |
+| `--with-cover` | Also download the Bilibili cover image | off |
+| `--with-mp3` | Also extract an MP3 audio track (Bilibili) | off |
 | `--keep-temp` | Keep the temporary segment directory | off |
 
 ### Project Structure
