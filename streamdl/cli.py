@@ -47,7 +47,48 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--with-mp3", action="store_true", help="B 站视频同时提取 MP3 音频")
     p.add_argument("--login", action="store_true",
                    help="B 站扫码登录（终端显示二维码），登录态保存后无需再输入 SESSDATA")
+    p.add_argument("--cookies", metavar="FILE",
+                   help="cookies.txt 文件路径（YouTube/抖音等站点验证需要时）")
     return p
+
+
+def _ytdlp_download(args) -> int:
+    """非 m3u8 链接（YouTube / 抖音等）交给 yt-dlp 引擎。"""
+    from .ytdlp_bridge import download as ytdlp_download
+    from .ytdlp_bridge import list_qualities
+
+    def _progress(label, done, total):
+        if total:
+            sys.stderr.write(f"\r{label}: {done/1048576:.1f}/{total/1048576:.1f} MB "
+                             f"({done/total*100:.1f}%)")
+        else:
+            sys.stderr.write(f"\r{label}: {done/1048576:.1f} MB")
+        sys.stderr.flush()
+
+    try:
+        print("使用 yt-dlp 引擎解析（YouTube / 抖音等）...")
+        title, qualities = list_qualities(args.url, proxy=args.proxy,
+                                          cookiefile=args.cookies)
+        print(f"标题: {title}")
+        if args.select and len(qualities) > 1:
+            for i, q in enumerate(qualities):
+                print(f"  [{i}] {q['label']}")
+            idx = int(input("请选择序号: ").strip())
+            chosen = qualities[idx]
+        else:
+            chosen = qualities[0]
+        print(f"已选择: {chosen['label']}")
+        out_dir = os.path.dirname(os.path.abspath(args.output)) or "."
+        final = ytdlp_download(args.url, out_dir, format_id=chosen["id"],
+                               proxy=args.proxy, cookiefile=args.cookies,
+                               on_progress=_progress)
+        sys.stderr.write("\n")
+    except Exception as e:  # noqa: BLE001
+        print(f"\n下载失败: {e}", file=sys.stderr)
+        return 1
+    size_mb = os.path.getsize(final) / 1024 / 1024
+    print(f"完成: {final} ({size_mb:.1f} MB)")
+    return 0
 
 
 def _do_login() -> int:
@@ -117,18 +158,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"完成: {final} ({size_mb:.1f} MB)")
         return 0
 
+    # 先按 m3u8 尝试；不是 m3u8 则交给 yt-dlp（YouTube / 抖音等）
     print(f"获取播放列表: {args.url}")
+    result = None
     try:
         text = dl.fetch_text(args.url)
-    except Exception as e:  # noqa: BLE001
-        print(f"获取失败: {e}", file=sys.stderr)
-        return 1
+        try:
+            result = parse_m3u8(text, args.url)
+        except ValueError:
+            result = None
+    except Exception:  # noqa: BLE001 - 非 m3u8 页面（HTML/重定向）属正常情况
+        result = None
 
-    try:
-        result = parse_m3u8(text, args.url)
-    except ValueError as e:
-        print(f"解析失败: {e}", file=sys.stderr)
-        return 1
+    if result is None:
+        return _ytdlp_download(args)
 
     media_url = args.url  # 若为 Master Playlist 则随后替换为解析出的变体地址
 

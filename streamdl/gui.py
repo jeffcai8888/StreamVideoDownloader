@@ -165,8 +165,17 @@ class DownloadDialog(tk.Toplevel):
                                         state="readonly", width=49)
         self.quality_box.grid(row=4, column=1, **pad)
 
+        ttk.Label(frm, text="Cookies文件:").grid(row=5, column=0, sticky="e", **pad)
+        ck_frm = ttk.Frame(frm)
+        ck_frm.grid(row=5, column=1, sticky="w")
+        self.cookies_var = tk.StringVar()
+        ttk.Entry(ck_frm, textvariable=self.cookies_var, width=42).pack(side="left")
+        ttk.Button(ck_frm, text="浏览…", command=self._browse_cookies).pack(side="left", padx=4)
+        ttk.Label(frm, text="（YouTube/抖音验证需要，可为空）", foreground="gray").grid(
+            row=6, column=1, sticky="w")
+
         extra_frm = ttk.Frame(frm)
-        extra_frm.grid(row=5, column=1, sticky="w")
+        extra_frm.grid(row=7, column=1, sticky="w")
         self.cover_var = tk.BooleanVar(value=True)
         self.mp3_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(extra_frm, text="同时保存封面",
@@ -174,14 +183,14 @@ class DownloadDialog(tk.Toplevel):
         ttk.Checkbutton(extra_frm, text="同时提取 MP3",
                         variable=self.mp3_var).pack(side="left", padx=8)
         ttk.Label(frm, text="（仅 B 站生效）", foreground="gray").grid(
-            row=6, column=1, sticky="w")
+            row=8, column=1, sticky="w")
 
         self.status_var = tk.StringVar(value="输入网址后点击「解析清晰度」")
         ttk.Label(frm, textvariable=self.status_var, foreground="gray").grid(
-            row=7, column=0, columnspan=2, sticky="w", **pad)
+            row=9, column=0, columnspan=2, sticky="w", **pad)
 
         btn_frm = ttk.Frame(frm)
-        btn_frm.grid(row=8, column=0, columnspan=2, pady=8)
+        btn_frm.grid(row=10, column=0, columnspan=2, pady=8)
         self.parse_btn = ttk.Button(btn_frm, text="解析清晰度", command=self._on_parse)
         self.parse_btn.pack(side="left", padx=6)
         self.dl_btn = ttk.Button(btn_frm, text="开始下载", command=self._on_download,
@@ -193,6 +202,13 @@ class DownloadDialog(tk.Toplevel):
         d = filedialog.askdirectory(parent=self, initialdir=self.dir_var.get())
         if d:
             self.dir_var.set(d)
+
+    def _browse_cookies(self):
+        f = filedialog.askopenfilename(
+            parent=self, title="选择 cookies.txt",
+            filetypes=[("Cookies 文件", "*.txt"), ("所有文件", "*.*")])
+        if f:
+            self.cookies_var.set(f)
 
     def _open_login(self):
         LoginDialog(self)
@@ -215,10 +231,12 @@ class DownloadDialog(tk.Toplevel):
         self.dl_btn.config(state="disabled")
         self.status_var.set("正在解析…")
         dl = self._make_downloader()  # tk 变量只能在主线程读取
-        threading.Thread(target=self._parse_worker, args=(url, dl),
+        cookiefile = self.cookies_var.get().strip() or None
+        threading.Thread(target=self._parse_worker, args=(url, dl, cookiefile),
                          daemon=True).start()
 
-    def _parse_worker(self, url: str, dl: StreamDownloader):
+    def _parse_worker(self, url: str, dl: StreamDownloader,
+                      cookiefile: str | None = None):
         try:
             if is_bilibili(url):
                 title, cid, play, view = get_video_info(dl, url)
@@ -230,8 +248,17 @@ class DownloadDialog(tk.Toplevel):
                     "qualities": qualities,
                 }))
             else:
-                text = dl.fetch_text(url)
-                result = parse_m3u8(text, url)
+                try:
+                    text = dl.fetch_text(url)
+                    result = parse_m3u8(text, url)
+                except Exception:  # noqa: BLE001 - 非 m3u8，交给 yt-dlp
+                    from .ytdlp_bridge import list_qualities as yt_list_qualities
+                    title, qualities = yt_list_qualities(url, cookiefile=cookiefile)
+                    self.app.queue.put(("parsed", {
+                        "kind": "ytdlp", "url": url, "title": title,
+                        "qualities": qualities,
+                    }))
+                    return
                 if isinstance(result, MediaPlaylist):
                     qualities = [{"id": None, "label": "默认"}]
                 else:
@@ -284,6 +311,7 @@ class DownloadDialog(tk.Toplevel):
             "quality_label": q["label"],
             "with_cover": self.cover_var.get(),
             "with_mp3": self.mp3_var.get(),
+            "cookiefile": self.cookies_var.get().strip() or None,
         })
         self.destroy()
 
@@ -390,7 +418,9 @@ class StreamDLApp:
                 headers["Cookie"] = f"SESSDATA={p['sessdata']}"
             dl = StreamDownloader(DownloadOptions(headers=headers or None))
 
-            if p["kind"] == "bilibili":
+            if p["kind"] == "ytdlp":
+                self._ytdlp_download(p, q)
+            elif p["kind"] == "bilibili":
                 # 视频流+音频流合计进度
                 stream_state: dict[str, tuple[int, int]] = {}
 
@@ -417,6 +447,24 @@ class StreamDLApp:
                 self._m3u8_download(dl, p, q)
         except Exception as e:  # noqa: BLE001
             q.put(("error", str(e)))
+
+    def _ytdlp_download(self, p: dict, q: queue.Queue):
+        from .ytdlp_bridge import download as yt_download
+
+        def on_bytes(label, done, total):
+            frac = done / total if total else 0
+            q.put(("progress", frac,
+                   f"{label} {_fmt_size(done)}"
+                   + (f" / {_fmt_size(total)}" if total else "")))
+
+        final = yt_download(p["url"], p["dir"], format_id=p["quality_id"],
+                            cookiefile=p.get("cookiefile"),
+                            on_progress=on_bytes)
+        q.put(("done", {
+            "name": os.path.basename(final), "path": final,
+            "size": os.path.getsize(final), "quality": p["quality_label"],
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }))
 
     def _m3u8_download(self, dl: StreamDownloader, p: dict, q: queue.Queue):
         import hashlib

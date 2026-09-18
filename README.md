@@ -11,6 +11,7 @@
 ### 功能特性
 
 - **HLS/m3u8 下载**：解析 Master Playlist（自动选最高码率，也可手动选择清晰度）与 Media Playlist
+- **YouTube / 抖音等**：内置 yt-dlp 引擎，粘贴视频链接即可下载，支持分辨率选择
 - **直播录制**：`--live` 模式持续轮询 m3u8 增量下载，直到直播结束或 Ctrl+C 停止后自动合并
 - **B 站视频下载**：直接传入 BV 号 / av 号 / 视频链接，自动获取 DASH 音视频流并无损合并
 - **AES-128 解密**：自动下载密钥并解密加密分片（含显式 IV 与默认 IV）
@@ -53,6 +54,22 @@ python -m PyInstaller --noconfirm --onefile --windowed --name StreamVideoDownloa
 > 注意：exe 不包含 ffmpeg，合并输出 MP4 仍需单独安装 ffmpeg。
 
 主界面展示已下载内容（名称、大小、清晰度、保存位置、完成时间），双击记录可打开所在目录。点击「新建下载」弹出对话框：输入视频网址、SESSDATA（仅 B 站高清需要）、选择保存目录，点击「解析清晰度」后选择分辨率，再点「开始下载」，主界面底部显示实时进度条。
+
+**下载 YouTube / 抖音视频**
+
+```bash
+# 直接粘贴链接（自动走 yt-dlp 引擎），默认最高清晰度
+python main.py "https://www.youtube.com/watch?v=xxxx"
+python main.py "https://v.douyin.com/xxxx/"
+
+# 手动选择分辨率
+python main.py "https://www.youtube.com/watch?v=xxxx" --select
+
+# 部分站点需要 Cookie 验证（如抖音、YouTube 登录视频）：
+# 1) 程序会自动尝试读取本机浏览器 Cookie（需先在浏览器访问过该站点）
+# 2) 或用浏览器扩展导出 cookies.txt 后指定：
+python main.py "https://v.douyin.com/xxxx/" --cookies cookies.txt
+```
 
 **下载 B 站视频**
 
@@ -108,6 +125,7 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--with-cover` | B 站视频同时下载封面图片 | 关闭 |
 | `--with-mp3` | B 站视频同时提取 MP3 音频 | 关闭 |
 | `--login` | B 站扫码登录并保存登录态 | — |
+| `--cookies` | cookies.txt 文件路径（YouTube/抖音验证需要时） | 无 |
 | `--keep-temp` | 保留临时分片目录 | 不保留 |
 
 ### 项目结构
@@ -118,6 +136,7 @@ streamdl/
 ├── downloader.py   # 多线程分片下载、AES-128 解密、重试、断点续传、直播录制
 ├── bilibili.py     # B 站 API 解析与 DASH 流下载
 ├── bili_login.py   # B 站扫码登录与 SESSDATA 持久化
+├── ytdlp_bridge.py # yt-dlp 集成（YouTube / 抖音等）
 ├── merger.py       # ffmpeg 合并 MP4 / 二进制拼接 TS
 ├── gui.py          # Tkinter 图形界面
 └── cli.py          # 命令行入口
@@ -137,6 +156,7 @@ A streaming media downloader supporting HLS (m3u8) and Bilibili videos: multi-th
 ### Features
 
 - **HLS/m3u8**: parses Master Playlists (auto-selects highest bandwidth, or pick manually) and Media Playlists
+- **YouTube / Douyin and more**: built-in yt-dlp engine — paste a video URL to download, with resolution selection
 - **Live recording**: `--live` mode polls the m3u8 and downloads new segments until the stream ends or you press Ctrl+C, then merges automatically
 - **Bilibili**: pass a BV ID / av ID / video URL directly; fetches DASH audio+video streams and merges them losslessly
 - **AES-128 decryption**: automatically fetches keys and decrypts encrypted segments (explicit or default IV)
@@ -179,6 +199,22 @@ python -m PyInstaller --noconfirm --onefile --windowed --name StreamVideoDownloa
 > Note: ffmpeg is not bundled in the exe — install it separately for MP4 merging.
 
 The main window lists downloaded items (name, size, quality, location, finish time); double-click a record to open its folder. Click "新建下载" (New Download) to open the dialog: enter the video URL, SESSDATA (only needed for high-quality Bilibili downloads), and pick a save directory. Click "解析清晰度" (Parse Qualities), choose a resolution, then "开始下载" (Start Download) — a live progress bar shows at the bottom of the main window.
+
+**Download YouTube / Douyin videos**
+
+```bash
+# Paste the URL directly (handled by the yt-dlp engine), best quality by default
+python main.py "https://www.youtube.com/watch?v=xxxx"
+python main.py "https://v.douyin.com/xxxx/"
+
+# Pick a resolution manually
+python main.py "https://www.youtube.com/watch?v=xxxx" --select
+
+# Some sites require cookie verification (e.g. Douyin, members-only YouTube):
+# 1) The app automatically tries your local browser cookies (visit the site in your browser first)
+# 2) Or export cookies.txt with a browser extension and pass it:
+python main.py "https://v.douyin.com/xxxx/" --cookies cookies.txt
+```
 
 **Download a Bilibili video**
 
@@ -234,6 +270,7 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--with-cover` | Also download the Bilibili cover image | off |
 | `--with-mp3` | Also extract an MP3 audio track (Bilibili) | off |
 | `--login` | Bilibili QR-code login and save the login state | — |
+| `--cookies` | Path to a cookies.txt file (for YouTube/Douyin verification) | none |
 | `--keep-temp` | Keep the temporary segment directory | off |
 
 ### Project Structure
@@ -244,6 +281,7 @@ streamdl/
 ├── downloader.py   # Multi-threaded segment download, AES-128 decryption, retry, resume, live recording
 ├── bilibili.py     # Bilibili API resolution and DASH stream download
 ├── bili_login.py   # Bilibili QR-code login and SESSDATA persistence
+├── ytdlp_bridge.py # yt-dlp integration (YouTube / Douyin etc.)
 ├── merger.py       # ffmpeg merge to MP4 / binary concat to TS
 ├── gui.py          # Tkinter graphical interface
 └── cli.py          # Command-line entry point
