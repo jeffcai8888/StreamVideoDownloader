@@ -20,11 +20,9 @@ from .bili_login import (WAITING_CONFIRM, WAITING_SCAN, generate_qrcode,
                          load_sessdata, render_qr_png, wait_login)
 from .bilibili import download_bilibili, get_video_info, is_bilibili, list_qualities
 from .downloader import DownloadOptions, StreamDownloader
+from .history import load_history, save_history
 from .merger import has_ffmpeg, merge
 from .parser import MediaPlaylist, parse_m3u8, pick_best_variant
-
-HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".streamdl_history.json")
-
 
 def _fmt_size(n: int) -> str:
     if n >= 1 << 30:
@@ -37,22 +35,6 @@ def _fmt_size(n: int) -> str:
 def _default_download_dir() -> str:
     d = os.path.join(os.path.expanduser("~"), "Downloads")
     return d if os.path.isdir(d) else os.getcwd()
-
-
-def load_history() -> list[dict]:
-    try:
-        with open(HISTORY_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:  # noqa: BLE001 - 历史文件损坏时从零开始
-        return []
-
-
-def save_history(records: list[dict]) -> None:
-    try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(records[-200:], f, ensure_ascii=False, indent=1)
-    except OSError:
-        pass
 
 
 class LoginDialog(tk.Toplevel):

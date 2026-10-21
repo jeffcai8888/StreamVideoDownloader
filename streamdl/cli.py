@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="B 站扫码登录（终端显示二维码），登录态保存后无需再输入 SESSDATA")
     p.add_argument("--cookies", metavar="FILE",
                    help="cookies.txt 文件路径（YouTube/抖音等站点验证需要时）")
+    p.add_argument("--web", action="store_true", help="启动网页版（浏览器打开本地面板）")
+    p.add_argument("--port", type=int, default=8670, help="网页版端口（默认 8670）")
     return p
 
 
@@ -119,6 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.gui:
         from .gui import run
         return run()
+
+    if args.web:
+        from .web import run as web_run
+        return web_run(port=args.port)
 
     if args.login:
         return _do_login()

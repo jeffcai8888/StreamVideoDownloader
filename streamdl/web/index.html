@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamVideoDownloader</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; background: #f0f2f5; color: #333; }
+  .container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .row { display: flex; align-items: center; margin-bottom: 12px; gap: 8px; }
+  .row label { width: 96px; text-align: right; flex-shrink: 0; font-size: 14px; }
+  .row input[type=text], .row input[type=password], .row select {
+    flex: 1; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; }
+  .hint { font-size: 12px; color: #999; margin-left: 104px; margin-top: -8px; margin-bottom: 10px; }
+  button { padding: 7px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  .btn-primary { background: #1677ff; color: #fff; }
+  .btn-primary:disabled { background: #a0c4ff; cursor: not-allowed; }
+  .btn-plain { background: #f0f0f0; }
+  .checks { display: flex; gap: 16px; margin-left: 104px; margin-bottom: 12px; font-size: 14px; }
+  .progress-wrap { margin-top: 8px; }
+  .progress { height: 14px; background: #e8e8e8; border-radius: 7px; overflow: hidden; }
+  .progress > div { height: 100%; background: #1677ff; width: 0; transition: width .3s; }
+  #statusText { font-size: 13px; color: #666; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 6px; border-bottom: 1px solid #eee; text-align: left; }
+  th { color: #888; font-weight: normal; }
+  td.path { color: #888; word-break: break-all; }
+  .msg { padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 14px; display: none; }
+  .msg.ok { display: block; background: #f6ffed; border: 1px solid #b7eb8f; color: #389e0d; }
+  .msg.err { display: block; background: #fff2f0; border: 1px solid #ffccc7; color: #cf1322; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>StreamVideoDownloader 网页版</h1>
+
+  <div class="card">
+    <div id="msg" class="msg"></div>
+    <div class="row">
+      <label>视频网址</label>
+      <input type="text" id="url" placeholder="B站 BV号/链接、m3u8 地址、YouTube / 抖音链接">
+    </div>
+    <div class="row">
+      <label>SESSDATA</label>
+      <input type="password" id="sessdata" placeholder="仅 B 站高清需要">
+    </div>
+    <div class="row">
+      <label>Cookies 文件</label>
+      <input type="text" id="cookiefile" placeholder="cookies.txt 路径（YouTube/抖音验证需要，可为空）">
+    </div>
+    <div class="row">
+      <label>保存目录</label>
+      <input type="text" id="dir">
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="withCover" checked> 同时保存封面</label>
+      <label><input type="checkbox" id="withMp3" checked> 同时提取 MP3</label>
+      <span style="color:#999;font-size:12px">（仅 B 站生效）</span>
+    </div>
+    <div class="row">
+      <label></label>
+      <button class="btn-plain" id="parseBtn" onclick="doParse()">解析清晰度</button>
+      <select id="quality" style="max-width:260px" disabled></select>
+      <button class="btn-primary" id="dlBtn" onclick="doDownload()" disabled>开始下载</button>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress"><div id="bar"></div></div>
+      <div id="statusText">就绪</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:16px">下载记录</h1>
+    <table>
+      <thead><tr><th>名称</th><th>大小</th><th>清晰度</th><th>保存位置</th><th>完成时间</th></tr></thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let currentTask = null;
+let qualities = [];
+let currentKind = "";
+
+function fmtSize(n) {
+  if (n >= 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+  return Math.round(n / 1024) + " KB";
+}
+
+function showMsg(text, ok) {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+  if (ok) setTimeout(() => el.className = "msg", 5000);
+}
+
+async function api(path, body) {
+  const resp = await fetch(path, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body || {})
+  });
+  return resp.json();
+}
+
+async function doParse() {
+  const url = document.getElementById("url").value.trim();
+  if (!url) { showMsg("请先输入视频网址", false); return; }
+  const btn = document.getElementById("parseBtn");
+  btn.disabled = true;
+  document.getElementById("statusText").textContent = "正在解析…";
+  try {
+    const r = await api("/api/parse", {
+      url,
+      sessdata: document.getElementById("sessdata").value.trim(),
+      cookiefile: document.getElementById("cookiefile").value.trim()
+    });
+    if (!r.ok) throw new Error(r.error);
+    qualities = r.qualities;
+    currentKind = r.kind;
+    const sel = document.getElementById("quality");
+    sel.innerHTML = "";
+    qualities.forEach(q => {
+      const opt = document.createElement("option");
+      opt.value = q.id == null ? "" : q.id;
+      opt.textContent = q.label;
+      sel.appendChild(opt);
+    });
+    sel.disabled = false;
+    document.getElementById("dlBtn").disabled = false;
+    document.getElementById("statusText").textContent =
+      "解析成功：" + (r.title || url).slice(0, 50) + "，共 " + qualities.length + " 个清晰度可选";
+  } catch (e) {
+    showMsg("解析失败：" + e.message, false);
+    document.getElementById("statusText").textContent = "解析失败";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doDownload() {
+  const sel = document.getElementById("quality");
+  const idx = sel.selectedIndex;
+  if (idx < 0 || !qualities.length) { showMsg("请先解析并选择分辨率", false); return; }
+  const q = qualities[idx];
+  const r = await api("/api/download", {
+    url: document.getElementById("url").value.trim(),
+    kind: currentKind,
+    quality_id: q.id,
+    quality_label: q.label,
+    sessdata: document.getElementById("sessdata").value.trim(),
+    cookiefile: document.getElementById("cookiefile").value.trim(),
+    dir: document.getElementById("dir").value.trim(),
+    with_cover: document.getElementById("withCover").checked,
+    with_mp3: document.getElementById("withMp3").checked
+  });
+  if (!r.ok) { showMsg("启动失败：" + r.error, false); return; }
+  currentTask = r.task_id;
+  document.getElementById("dlBtn").disabled = true;
+  pollTask();
+}
+
+async function pollTask() {
+  if (!currentTask) return;
+  try {
+    const t = await (await fetch("/api/task/" + currentTask)).json();
+    document.getElementById("bar").style.width = (t.percent || 0) + "%";
+    document.getElementById("statusText").textContent =
+      "下载中… " + (t.percent || 0) + "% " + (t.text || "");
+    if (t.status === "done") {
+      showMsg("下载完成：" + t.record.name + "（" + fmtSize(t.record.size) + "）", true);
+      document.getElementById("statusText").textContent = "完成：" + t.record.name;
+      currentTask = null;
+      document.getElementById("dlBtn").disabled = false;
+      loadHistory();
+      return;
+    }
+    if (t.status === "error") {
+      showMsg("下载失败：" + t.error, false);
+      document.getElementById("statusText").textContent = "下载失败";
+      currentTask = null;
+      document.getElementById("dlBtn").disabled = false;
+      return;
+    }
+  } catch (e) { /* 网络抖动忽略 */ }
+  setTimeout(pollTask, 500);
+}
+
+async function loadHistory() {
+  const r = await (await fetch("/api/history")).json();
+  document.getElementById("dir").value = r.default_dir;
+  if (r.sessdata_saved && !document.getElementById("sessdata").value) {
+    document.getElementById("sessdata").placeholder = "（已读取保存的 B 站登录态）";
+  }
+  const tbody = document.getElementById("historyBody");
+  tbody.innerHTML = "";
+  r.records.slice().reverse().forEach(rec => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + esc(rec.name) + "</td><td>" + fmtSize(rec.size) +
+      "</td><td>" + esc(rec.quality || "") + "</td><td class='path'>" + esc(rec.path) +
+      "</td><td>" + esc(rec.time) + "</td>";
+    tbody.appendChild(tr);
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+loadHistory();
+</script>
+</body>
+</html>

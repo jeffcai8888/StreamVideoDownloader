@@ -43,6 +43,17 @@ streamdl-gui          # pip install . 之后
 python main.py --gui  # 或直接运行
 ```
 
+**网页版（纯 HTML 界面 + 本地后端）**
+
+```bash
+streamdl-web          # pip install . 之后
+python main.py --web  # 或直接运行，浏览器自动打开 http://127.0.0.1:8670
+```
+
+> 说明：浏览器受跨域（CORS）限制无法直接抓取各视频站，因此网页版由一个
+> 本地 Python 后端代为下载，前端为纯 HTML 页面（无任何框架/构建步骤）。
+> 功能与 GUI 一致：解析清晰度、选择分辨率、进度条、下载记录。
+
 也可以打包成单文件 exe（双击启动，无需安装 Python）：
 
 ```bash
@@ -126,6 +137,8 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--with-mp3` | B 站视频同时提取 MP3 音频 | 关闭 |
 | `--login` | B 站扫码登录并保存登录态 | — |
 | `--cookies` | cookies.txt 文件路径（YouTube/抖音验证需要时） | 无 |
+| `--web` | 启动网页版 | 关闭 |
+| `--port` | 网页版端口 | `8670` |
 | `--keep-temp` | 保留临时分片目录 | 不保留 |
 
 ### 项目结构
@@ -139,6 +152,8 @@ streamdl/
 ├── ytdlp_bridge.py # yt-dlp 集成（YouTube / 抖音等）
 ├── merger.py       # ffmpeg 合并 MP4 / 二进制拼接 TS
 ├── gui.py          # Tkinter 图形界面
+├── web.py          # 网页版本地服务（纯 HTML 前端在 web/index.html）
+├── history.py      # 下载历史（GUI 与网页版共用）
 └── cli.py          # 命令行入口
 ```
 
@@ -187,6 +202,19 @@ sudo apt install ffmpeg           # Debian/Ubuntu
 streamdl-gui          # after pip install .
 python main.py --gui  # or run directly
 ```
+
+**Web version (pure HTML UI + local backend)**
+
+```bash
+streamdl-web          # after pip install .
+python main.py --web  # or run directly; the browser opens http://127.0.0.1:8670
+```
+
+> Note: browsers cannot fetch video sites cross-origin (CORS), so the web UI
+> is served by a small local Python backend that performs the downloads.
+> The frontend is a single pure HTML page (no framework, no build step).
+> Same features as the GUI: quality parsing, resolution selection, progress
+> bar, download history.
 
 You can also build a standalone exe (double-click to launch, no Python required):
 
@@ -271,6 +299,8 @@ python main.py "https://example.com/live/index.m3u8" --live -o live.mp4
 | `--with-mp3` | Also extract an MP3 audio track (Bilibili) | off |
 | `--login` | Bilibili QR-code login and save the login state | — |
 | `--cookies` | Path to a cookies.txt file (for YouTube/Douyin verification) | none |
+| `--web` | Start the web UI | off |
+| `--port` | Web UI port | `8670` |
 | `--keep-temp` | Keep the temporary segment directory | off |
 
 ### Project Structure
@@ -284,6 +314,8 @@ streamdl/
 ├── ytdlp_bridge.py # yt-dlp integration (YouTube / Douyin etc.)
 ├── merger.py       # ffmpeg merge to MP4 / binary concat to TS
 ├── gui.py          # Tkinter graphical interface
+├── web.py          # Web UI backend (pure HTML frontend in web/index.html)
+├── history.py      # Download history (shared by GUI and web UI)
 └── cli.py          # Command-line entry point
 ```
 

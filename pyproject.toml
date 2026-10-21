@@ -19,6 +19,10 @@ dependencies = [
 [project.scripts]
 streamdl = "streamdl.cli:main"
 streamdl-gui = "streamdl.gui:run"
+streamdl-web = "streamdl.web:run"
 
 [tool.setuptools.packages.find]
 include = ["streamdl*"]
+
+[tool.setuptools.package-data]
+streamdl = ["web/*.html"]
